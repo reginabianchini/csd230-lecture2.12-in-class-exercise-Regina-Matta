@@ -45,18 +45,23 @@ public class WebSecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
-                .csrf(csrf -> csrf.disable()) // Stateless APIs disable CSRF
                 .authorizeHttpRequests(auth -> auth
-                        // 1. PERMIT the React "Front Door" and its compiled assets
+                        // 1. PUBLIC: Handshake, Login Page, and Static Assets
+                        // These must be at the very top
                         .requestMatchers("/", "/index.html", "/assets/**", "/favicon.ico").permitAll()
-
-
-                        // 2. PERMIT the Handshake paths
                         .requestMatchers("/api/auth/token", "/h2-console/**", "/error").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
+                        // 2. WRITE OPERATIONS: Strictly ADMIN ONLY
+                        // We check the HTTP Method first. Only ADMINs can POST, PUT, or DELETE.
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/rest/**").hasAuthority("ADMIN")
+                        .requestMatchers(org.springframework.http.HttpMethod.PUT, "/api/rest/**").hasAuthority("ADMIN")
+                        .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/api/rest/**").hasAuthority("ADMIN")
 
-                        // 3. SECURE the Data paths
-                        .requestMatchers("/api/rest/**").hasAnyRole("ADMIN", "USER")
+                        // 3. READ OPERATIONS: Both roles can GET data
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/rest/**").hasAnyAuthority("ADMIN", "USER")
+
+                        // 4. CATCH-ALL: Anything else must be authenticated
                         .anyRequest().authenticated()
                 )
 
