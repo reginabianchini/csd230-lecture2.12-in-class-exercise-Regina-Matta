@@ -53,15 +53,16 @@ function Navbar({ username, onLogout }) {
             {/* LEFT SIDE: Navigation Links */}
             <div style={linkGroupStyle}>
                 <Link to="/" style={linkStyle}>🏠 Home</Link>
-                <Link to="/inventory" style={linkStyle}>📚 View Inventory</Link>
+                <Link to="/inventory" style={linkStyle}>📚 Books</Link>
+                <Link to="/magazines" style={linkStyle}>📰 Magazines</Link> {/* Public/User view */}
+                <Link to="/niche" style={linkStyle}> Smart Devices</Link>
 
-
-                {/* 3. ROLE-BASED ACCESS CONTROL (RBAC) */}
-                {/* This link only appears if the RSA token contains ROLE_ADMIN */}
                 {isAdmin && (
-                    <Link to="/add" style={{ ...linkStyle, color: '#ffc107' }}>
-                        ➕ Admin: Add Book
-                    </Link>
+                    <>
+                        <Link to="/add" style={{ ...linkStyle, color: '#ffc107' }}>➕ Add Book</Link>
+                        <Link to="/magazines/add" style={{ ...linkStyle, color: '#aa3bff' }}>➕ Add Magazine</Link>
+                        <Link to="/niche/add" style={{color: '#28a745'}}>+ Add Device</Link>
+                    </>
                 )}
             </div>
 
@@ -85,6 +86,5 @@ function Navbar({ username, onLogout }) {
         </nav>
     );
 }
-
 
 export default Navbar;

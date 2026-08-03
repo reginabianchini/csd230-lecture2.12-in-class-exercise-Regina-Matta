@@ -8,6 +8,7 @@ import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -36,7 +37,6 @@ public class WebSecurityConfig {
 
     @Bean
     public AuthenticationManager authManager(UserDetailsService userDetailsService, PasswordEncoder passwordEncoder) {
-        // REQUIRED: Spring Security 7 requires UserDetailsService in the constructor
         var authProvider = new DaoAuthenticationProvider(userDetailsService);
         authProvider.setPasswordEncoder(passwordEncoder);
         return new ProviderManager(authProvider);
@@ -45,37 +45,46 @@ public class WebSecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
+                // 1. Disable CSRF for API and H2 Console
+                .csrf(csrf -> csrf.disable())
+
+                // 2. Authorization Rules
                 .authorizeHttpRequests(auth -> auth
-                        // 1. PUBLIC: Handshake, Login Page, and Static Assets
-                        // These must be at the very top
-                        .requestMatchers("/", "/index.html", "/assets/**", "/favicon.ico").permitAll()
+                        // Public Assets & Auth
+                        .requestMatchers("/", "/index.html", "/assets/**", "/favicon.svg", "/favicon.ico").permitAll()
                         .requestMatchers("/api/auth/token", "/h2-console/**", "/error").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
-                        // 2. WRITE OPERATIONS: Strictly ADMIN ONLY
-                        // We check the HTTP Method first. Only ADMINs can POST, PUT, or DELETE.
-                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/rest/**").hasAuthority("ADMIN")
-                        .requestMatchers(org.springframework.http.HttpMethod.PUT, "/api/rest/**").hasAuthority("ADMIN")
-                        .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/api/rest/**").hasAuthority("ADMIN")
+                        // Secure API Paths (Check for ROLE_ADMIN / ROLE_USER)
+                        .requestMatchers(HttpMethod.POST, "/api/rest/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/rest/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/rest/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/rest/**").hasAnyRole("ADMIN", "USER")
 
-                        // 3. READ OPERATIONS: Both roles can GET data
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/rest/**").hasAnyAuthority("ADMIN", "USER")
-
-                        // 4. CATCH-ALL: Anything else must be authenticated
                         .anyRequest().authenticated()
                 )
 
+                // 3. Security Headers (Required for H2 Console frames)
+                .headers(headers -> headers.frameOptions(frame -> frame.disable()))
+
+                // 4. Stateless Session (JWT)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+                // 5. Configure JWT Resource Server
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt ->
                         jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
-                .headers(headers -> headers.frameOptions(frame -> frame.disable()))
+
                 .build();
     }
 
+    // THIS IS THE METHOD THAT WAS MISSING
     @Bean
     public JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
-        grantedAuthoritiesConverter.setAuthorityPrefix(""); // Match our DB roles (ADMIN/USER)
+        // We leave the prefix as default ("SCOPE_") or set to empty if your token already has "ROLE_"
+        // Since your CustomUserDetailsService uses .roles(), the token will have "ROLE_ADMIN"
+        // Setting prefix to empty allows hasRole("ADMIN") to match "ROLE_ADMIN"
+        grantedAuthoritiesConverter.setAuthorityPrefix("");
         grantedAuthoritiesConverter.setAuthoritiesClaimName("scope");
 
         JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
@@ -95,4 +104,3 @@ public class WebSecurityConfig {
         return new NimbusJwtEncoder(jwks);
     }
 }
-
